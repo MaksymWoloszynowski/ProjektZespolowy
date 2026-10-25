@@ -1,10 +1,18 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
+import { AuthModule } from '@thallesp/nestjs-better-auth';
+import { ConfigModule } from '@nestjs/config';
+import { DATABASE_CONNECTION, DatabaseModule } from './db/db.module.js';
+import type { Database } from './db/db.module.js';
+import { createAuth } from './auth/auth.js';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../.env' }),
+    DatabaseModule,
+    AuthModule.forRootAsync({
+      inject: [DATABASE_CONNECTION],
+      useFactory: (db: Database) => ({ auth: createAuth(db) }),
+    }),
+  ],
 })
 export class AppModule {}
