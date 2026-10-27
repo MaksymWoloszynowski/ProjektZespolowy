@@ -1,5 +1,5 @@
 import type { Position } from './types';
-import Piece = require('./piece');
+import Piece from './piece';
 
 class Board {
     public readonly size = 8;
@@ -57,4 +57,4 @@ class Board {
     }
 }
 
-export = Board;
+export default Board;
