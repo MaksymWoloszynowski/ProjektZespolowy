@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CheckersEngine } from '../../../src/engines/checkers/checkersEngine.js';
-import type { CheckersState, Piece } from '../../../src/engines/checkers/checkersEngine.js';
+import type {
+  CheckersState,
+  Piece,
+} from '../../../src/engines/checkers/checkersEngine.js';
 
 describe('CheckersEngine - Zasady Gry i Logika', () => {
   let engine: CheckersEngine;
@@ -15,7 +18,12 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
   // Pozwala ułożyć dowolną sytuację na planszy, aby nie grać od początku
   const createCustomState = (
     turn: 'WHITE' | 'BLACK',
-    pieces: { row: number; col: number; player: 'WHITE' | 'BLACK'; type: 'MAN' | 'KING' }[]
+    pieces: {
+      row: number;
+      col: number;
+      player: 'WHITE' | 'BLACK';
+      type: 'MAN' | 'KING';
+    }[],
   ): CheckersState => {
     const state = engine.createInitialState([p1, p2]);
     // Czyścimy planszę
@@ -51,7 +59,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const result = engine.applyAction(state, p2, {
         type: 'MOVE',
         from: { row: 2, col: 1 },
-        to: { row: 3, col: 0 }
+        to: { row: 3, col: 0 },
       });
 
       expect(result.ok).toBe(false);
@@ -64,7 +72,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 0 },
-        to: { row: 4, col: 1 }
+        to: { row: 4, col: 1 },
       });
 
       expect(result.ok).toBe(true);
@@ -78,13 +86,13 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
     it('nie powinna pozwalać na wejście na zajęte pole', () => {
       const state = createCustomState('WHITE', [
         { row: 5, col: 2, player: 'WHITE', type: 'MAN' },
-        { row: 4, col: 3, player: 'WHITE', type: 'MAN' } // Pole zajęte przez swojego
+        { row: 4, col: 3, player: 'WHITE', type: 'MAN' }, // Pole zajęte przez swojego
       ]);
 
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 4, col: 3 }
+        to: { row: 4, col: 3 },
       });
 
       expect(result.ok).toBe(false);
@@ -96,14 +104,14 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const state = createCustomState('WHITE', [
         { row: 5, col: 2, player: 'WHITE', type: 'MAN' },
         { row: 4, col: 3, player: 'BLACK', type: 'MAN' }, // Ofiara
-        { row: 5, col: 6, player: 'WHITE', type: 'MAN' }  // Zwykły pion z boku
+        { row: 5, col: 6, player: 'WHITE', type: 'MAN' }, // Zwykły pion z boku
       ]);
 
       // Próba ruchu zwykłym pionem zamiast wykonania bicia
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 6 },
-        to: { row: 4, col: 7 }
+        to: { row: 4, col: 7 },
       });
 
       expect(result.ok).toBe(false); // Ruch musi zostać odrzucony
@@ -119,14 +127,14 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
 
         // Ścieżka 2: Bicie w prawo (2 pionki)
         { row: 4, col: 3, player: 'BLACK', type: 'MAN' },
-        { row: 2, col: 5, player: 'BLACK', type: 'MAN' }
+        { row: 2, col: 5, player: 'BLACK', type: 'MAN' },
       ]);
 
       // Próba bicia w lewo (mniej bić) - powinna zostać odrzucona
       const badCapture = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 3, col: 0 }
+        to: { row: 3, col: 0 },
       });
       expect(badCapture.ok).toBe(false);
 
@@ -134,7 +142,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const goodCapture = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 3, col: 4 }
+        to: { row: 3, col: 4 },
       });
       expect(goodCapture.ok).toBe(true);
     });
@@ -143,14 +151,14 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const state = createCustomState('WHITE', [
         { row: 5, col: 2, player: 'WHITE', type: 'MAN' },
         { row: 4, col: 3, player: 'BLACK', type: 'MAN' },
-        { row: 2, col: 5, player: 'BLACK', type: 'MAN' }
+        { row: 2, col: 5, player: 'BLACK', type: 'MAN' },
       ]);
 
       // Krok 1 bicia
       const step1 = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 3, col: 4 }
+        to: { row: 3, col: 4 },
       });
 
       expect(step1.ok).toBe(true);
@@ -164,13 +172,13 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
     it('powinna usunąć ofiary dopiero po zakończeniu całego bicia (Zasada Turecka)', () => {
       const state = createCustomState('WHITE', [
         { row: 5, col: 2, player: 'WHITE', type: 'MAN' },
-        { row: 4, col: 3, player: 'BLACK', type: 'MAN' }
+        { row: 4, col: 3, player: 'BLACK', type: 'MAN' },
       ]);
 
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 3, col: 4 }
+        to: { row: 3, col: 4 },
       });
 
       // To było pojedyncze bicie, więc po ruchu ofiara powinna zniknąć
@@ -183,13 +191,13 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
   describe('Promocja i Damki (Kings)', () => {
     it('powinna promować piona na damkę po dotarciu do ostatniego rzędu', () => {
       const state = createCustomState('WHITE', [
-        { row: 1, col: 2, player: 'WHITE', type: 'MAN' } // Rząd 1, jeden krok od promocji (rząd 0)
+        { row: 1, col: 2, player: 'WHITE', type: 'MAN' }, // Rząd 1, jeden krok od promocji (rząd 0)
       ]);
 
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 1, col: 2 },
-        to: { row: 0, col: 3 }
+        to: { row: 0, col: 3 },
       });
 
       expect(result.ok).toBe(true);
@@ -200,13 +208,13 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
 
     it('Latająca damka powinna móc poruszać się o wiele pół', () => {
       const state = createCustomState('WHITE', [
-        { row: 7, col: 0, player: 'WHITE', type: 'KING' }
+        { row: 7, col: 0, player: 'WHITE', type: 'KING' },
       ]);
 
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 7, col: 0 },
-        to: { row: 2, col: 5 } // Lot przez całą przekątną
+        to: { row: 2, col: 5 }, // Lot przez całą przekątną
       });
 
       expect(result.ok).toBe(true);
@@ -220,14 +228,14 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
     it('powinna ogłosić zwycięzcę, gdy przeciwnik nie ma figur/ruchów', () => {
       const state = createCustomState('WHITE', [
         { row: 5, col: 2, player: 'WHITE', type: 'MAN' },
-        { row: 4, col: 3, player: 'BLACK', type: 'MAN' } // Ostatni czarny pion
+        { row: 4, col: 3, player: 'BLACK', type: 'MAN' }, // Ostatni czarny pion
       ]);
 
       // Biały bije ostatniego piona
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 5, col: 2 },
-        to: { row: 3, col: 4 }
+        to: { row: 3, col: 4 },
       });
 
       expect(result.ok).toBe(true);
@@ -235,7 +243,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
         expect(result.state.winner).toBe('WHITE');
         expect(engine.getResult(result.state)).toEqual({
           [p1]: 'win',
-          [p2]: 'loss'
+          [p2]: 'loss',
         });
       }
     });
@@ -243,7 +251,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
     it('powinna ogłosić remis po 15 turach (30 ruchach) bez bicia i ruchu pionem', () => {
       let state = createCustomState('WHITE', [
         { row: 7, col: 0, player: 'WHITE', type: 'KING' },
-        { row: 0, col: 7, player: 'BLACK', type: 'KING' }
+        { row: 0, col: 7, player: 'BLACK', type: 'KING' },
       ]);
 
       // Ręcznie nabijamy licznik przed ostatnim ruchem
@@ -253,7 +261,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
       const result = engine.applyAction(state, p1, {
         type: 'MOVE',
         from: { row: 7, col: 0 },
-        to: { row: 6, col: 1 }
+        to: { row: 6, col: 1 },
       });
 
       expect(result.ok).toBe(true);
@@ -261,7 +269,7 @@ describe('CheckersEngine - Zasady Gry i Logika', () => {
         expect(result.state.isDraw).toBe(true);
         expect(engine.getResult(result.state)).toEqual({
           [p1]: 'draw',
-          [p2]: 'draw'
+          [p2]: 'draw',
         });
       }
     });
