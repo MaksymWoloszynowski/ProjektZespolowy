@@ -4,15 +4,19 @@ import { ConfigModule } from '@nestjs/config';
 import { DATABASE_CONNECTION, DatabaseModule } from './db/db.module.js';
 import type { Database } from './db/db.module.js';
 import { createAuth } from './auth/auth.js';
+import { AppGateway } from './ws/app.gateway.js';
+import { TablesModule } from './tables/tables.module.js';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '../.env' }),
     DatabaseModule,
+    TablesModule,
     AuthModule.forRootAsync({
       inject: [DATABASE_CONNECTION],
       useFactory: (db: Database) => ({ auth: createAuth(db) }),
     }),
   ],
+  providers: [AppGateway],
 })
 export class AppModule {}
