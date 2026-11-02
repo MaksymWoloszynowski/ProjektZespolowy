@@ -1,5 +1,5 @@
-import type { Position, Move, Player } from './types';
-import Board from './board';
+import type { Position, Move, Player } from './types.js';
+import Board from './board.js';
 
 class Game {
   public board: Board;

@@ -1,5 +1,5 @@
-import type { Position } from './types';
-import Piece from './piece';
+import type { Position } from './types.js';
+import Piece from './piece.js';
 
 class Board {
   public readonly size = 8;

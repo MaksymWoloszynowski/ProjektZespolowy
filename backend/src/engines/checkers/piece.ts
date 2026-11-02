@@ -1,4 +1,4 @@
-import type { Player, PieceType } from './types';
+import type { Player, PieceType } from './types.js';
 
 class Piece {
   constructor(

@@ -1,4 +1,9 @@
-import type { PlayerId, GameEngine, GameResult, ActionResult } from '../engine';
+import type {
+  PlayerId,
+  GameEngine,
+  GameResult,
+  ActionResult,
+} from '../engine.js';
 // --- DOMENA WARCABÓW ---
 
 export type PlayerColor = 'WHITE' | 'BLACK';
