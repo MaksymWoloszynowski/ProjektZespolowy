@@ -1,34 +1,25 @@
 import { useEffect, useState } from "react"
-import type { Position, SelectedPiece } from "./types"
+import type { PieceType } from "./types"
 
 type PieceProps = {
-    type: string | null
-    position: Position
-    selected: SelectedPiece | null
-    setSelected: React.Dispatch<React.SetStateAction<SelectedPiece | null>>
+    piece: PieceType
+    selected: PieceType | null
+    setSelected: React.Dispatch<React.SetStateAction<PieceType | null>>
 }
 
-export default function Piece({type, position, selected, setSelected}: PieceProps) {
+export default function Piece({piece, selected, setSelected}: PieceProps) {
 
     const [image, setImage] = useState<string>("checkers/white_piece.png")
 
     useEffect(() => {
-        switch (type) {
-            case "white":
-                setImage("checkers/white_piece.png")
-                break
-            case "black":
-                setImage("checkers/black_piece.png")
-                break
-            case "white_king":
-                setImage("checkers/white_king.png")
-                break
-            case "black_king":
-                setImage("checkers/black_king.png")
-                break
-            default:
-
-
+        if (piece.color === "white" && piece.type === "normal") {
+            setImage("checkers/white_piece.png")
+        } else if (piece.color === "black" && piece.type === "normal") {
+            setImage("checkers/black_piece.png")
+        } else if (piece.color === "white" && piece.type === "king") {
+            setImage("checkers/white_king.png")
+        } else if (piece.color === "black" && piece.type === "king") {
+            setImage("checkers/black_king.png")
         }
 
     }, [])
@@ -38,15 +29,15 @@ export default function Piece({type, position, selected, setSelected}: PieceProp
     }
 
     function selectPiece(): void {
-        if (selected && selected.position.column === position.column && selected.position.row === position.row) {
+        if (isSelected(piece.position.row, piece.position.column)) {
             setSelected(null)
             return
         }
-        setSelected({type: type, position: position})
+        setSelected(piece)
     }
 
 
     return (
-        <img onClick={selectPiece} className={["piece", isSelected(position.row, position.column) && "selectedPiece" ].join(" ")} src={image} alt="Piece"></img>
+        <img onClick={selectPiece} className={["piece", isSelected(piece.position.row, piece.position.column) && "selectedPiece" ].join(" ")} src={image} alt="Piece"></img>
     )
 }

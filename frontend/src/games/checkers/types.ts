@@ -1,8 +1,9 @@
 
-export type BoardType = (string | null)[][];
+export type BoardType = (PieceType | null)[][];
 
-export type SelectedPiece = {
-    type: string | null
+export type PieceType = {
+    color: "white" | "black"
+    type: "normal" | "king"
     position: Position
 }
 
