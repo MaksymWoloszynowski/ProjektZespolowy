@@ -1,0 +1,59 @@
+body {
+    margin: auto;
+}
+
+header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    height: 10vh;
+    background-color: antiquewhite;
+}
+
+header div {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+
+header div p {
+    padding: 5px;
+}
+
+
+
+#gameSelect {
+    justify-self: center;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+}
+
+#gameSelect a {
+    margin: 10px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.game_window {
+    width: 20vw;
+    border-radius: 10px;
+    background-color: rgb(230, 230, 230);
+    box-shadow: 0px 0px 20px beige;
+
+    transition: 0.2s;
+    transform: scale(1);
+}
+
+.game_window:hover {
+    transform: scale(1.05);
+}
+
+.game_window:active {
+    transform: scale(1.1);
+
+}
+
+.game_window img {
+    width: 20vw;
+}
