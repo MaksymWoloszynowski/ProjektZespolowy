@@ -319,7 +319,7 @@ export class CheckersEngine implements GameEngine<
   CheckersView
 > {
   public readonly id = 'checkers';
-  public readonly name = 'Checkers'
+  public readonly name = 'Checkers';
   public readonly usesElo = true;
   public readonly minPlayers = 2;
   public readonly maxPlayers = 2;
