@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CheckersEngine } from '../../../src/engines/checkers/checkersEngine.js';
 import type {
   CheckersState,
-  Piece,
 } from '../../../src/engines/checkers/checkersEngine.js';
 
 describe('CheckersEngine - Zasady Gry i Logika', () => {

@@ -318,6 +318,9 @@ export class CheckersEngine implements GameEngine<
   CheckersAction,
   CheckersView
 > {
+  public readonly id = 'checkers';
+  public readonly name = 'Checkers'
+  public readonly usesElo = true;
   public readonly minPlayers = 2;
   public readonly maxPlayers = 2;
 
@@ -468,7 +471,7 @@ export class CheckersEngine implements GameEngine<
     return nextState;
   }
 
-  public getPlayerView(state: CheckersState, playerId: PlayerId): CheckersView {
+  public getPlayerView(state: CheckersState): CheckersView {
     return state;
   }
 
