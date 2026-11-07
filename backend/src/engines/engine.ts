@@ -5,6 +5,9 @@ export type ActionResult<State> =
   { ok: true; state: State } | { ok: false; reason: string };
 
 export interface GameEngine<State, Action, PlayerView> {
+  readonly id: string;
+  readonly name: string;
+  readonly usesElo: boolean;
   readonly minPlayers: number;
   readonly maxPlayers: number;
   createInitialState(players: PlayerId[]): State;
