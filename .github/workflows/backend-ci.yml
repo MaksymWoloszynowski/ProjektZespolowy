@@ -48,7 +48,7 @@ jobs:
             run: npm run lint
 
           - name: Check code style
-            run: npx prettier --check "src/**/*.ts"
+            run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
           
           - name: Run tests
             run: npm test
