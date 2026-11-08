@@ -1,12 +1,16 @@
 import Player from "./player.js";
 import Boneyard from "./boneyard.js";
-import DominoBoard from "./dominoBoard.js";
+import DominoBoard, { PlacementSide } from "./dominoBoard.js";
 import DominoPiece from "./dominoPiece.js";
 
-type GameStatus = 'waiting' | 'playing' | 'roundOver' | 'gameOver';
+export type GameStatus = 'waiting' | 'playing' | 'roundOver' | 'gameOver';
+
+export interface ActionResult {
+    ok: boolean;
+    reason?: string;
+}
 
 class Game {
-
     private boneyard: Boneyard;
     private winner: Player | null;
     private players: Player[];
@@ -14,9 +18,10 @@ class Game {
     private pointsToWin: number;
     private dominoBoard: DominoBoard;
     private status: GameStatus = 'waiting';
+    private consecutivePasses: number = 0;
+    private roundFirstPieceMustBeDouble: boolean = false;
 
-
-    constructor(players: Player[], pointsToWin: number) {
+    constructor(players: Player[], pointsToWin: number = 100) {
         this.boneyard = new Boneyard();
         this.players = players;
         this.pointsToWin = pointsToWin;
@@ -25,154 +30,357 @@ class Game {
         this.dominoBoard = new DominoBoard();
     }
 
-
-    // Tasuje klocki i rozdaje każdemu graczowi początkową pulę (np. 7 klocków)
-    public dealInitialPieces(): void {
-        this.boneyard.shuffle();
-        for (let i = 0; i < 7; i++) {
-            this.players.forEach(player => {
-                const piece = this.boneyard.drawPiece();
-                if (piece) {
-                  player.addPieceToHand(piece);
-                }
-            })
-        }
-
+    public getStatus(): GameStatus {
+        return this.status;
     }
 
-    // Sprawdza ręce graczy i ustala, kto ma najwyższy dubel (lub po prostu kto zaczyna)
-    public determineFirstPlayer(): Player | null {
-        const mapOfDoubles: Map<Player, DominoPiece> = new Map();
+    public getCurrentPlayer(): Player | null {
+        return this.currentPlayer;
+    }
 
-        this.players.forEach(player => {
-            const hand: DominoPiece[] = player.getHand();
+    public getWinner(): Player | null {
+        return this.winner;
+    }
 
-            const playerDoubles: DominoPiece[] = hand.filter(piece => piece.isDouble());
+    public getBoard(): DominoBoard {
+        return this.dominoBoard;
+    }
 
-            const sortedDoubles = playerDoubles.sort((double1: DominoPiece, double2: DominoPiece) => {
-                return double2.getPips()[0] - double1.getPips()[0];
-            });
+    public getBoneyard(): Boneyard {
+        return this.boneyard;
+    }
 
-            if (sortedDoubles.length !== 0) {
-                mapOfDoubles.set(player, sortedDoubles[0]);
-            }
-        });
-
-        if (mapOfDoubles.size === 0) {
-            // Nikt nie ma dubla. W zależności od zasad można tu zwrócić null
-            // i kazać graczom dobierać z boneyarda, aż ktoś wylosuje dubla.
-            return null;
+    // Inicjalizuje i rozpoczyna całą partię gry
+    public startGame(): ActionResult {
+        if (this.players.length < 2 || this.players.length > 4) {
+            return { ok: false, reason: 'Gra w domino wymaga od 2 do 4 graczy' };
         }
-        else {
-            // Zmienne do śledzenia gracza z absolutnie najwyższym dublem
-            let startingPlayer: Player | null = null;
-            let highestValue = -1;
 
-            // Przeszukujemy naszą mapę, aby znaleźć zwycięzcę
-            mapOfDoubles.forEach((piece, player) => {
-                const value = piece.getPips()[0];
+        this.winner = null;
+        this.startNewRound();
+        return { ok: true };
+    }
 
-                if (value > highestValue) {
-                    highestValue = value;
-                    startingPlayer = player;
+    // Rozpoczyna nową rundę (resetuje stół, tasuje klocki, rozdaje ręce)
+    public startNewRound(): void {
+        this.dominoBoard.reset();
+        this.boneyard.reset();
+        this.boneyard.shuffle();
+        this.consecutivePasses = 0;
+
+        for (const player of this.players) {
+            player.clearHand();
+        }
+
+        this.dealInitialPieces();
+        this.currentPlayer = this.determineFirstPlayer();
+        this.status = 'playing';
+    }
+
+    // Tasuje klocki i rozdaje każdemu graczowi początkową pulę:
+    // 2 graczy -> po 7 klocków
+    // 3 lub 4 graczy -> po 5 klocków (standard w Double-Six)
+    public dealInitialPieces(): void {
+        const piecesPerPlayer = this.players.length === 2 ? 7 : 5;
+
+        for (let i = 0; i < piecesPerPlayer; i++) {
+            for (const player of this.players) {
+                const piece = this.boneyard.drawPiece();
+                if (piece) {
+                    player.addPieceToHand(piece);
                 }
-            });
-            return startingPlayer;
+            }
         }
+    }
+
+    // Ustala gracza rozpoczynającego:
+    // 1. Gracz z najwyższym dublem ([6,6], [5,5], itd.)
+    // 2. Jeśli nikt nie ma dubla -> gracz z klockiem o najwyższej sumie oczek (np. [6,5])
+    public determineFirstPlayer(): Player | null {
+        let bestDoublePlayer: Player | null = null;
+        let highestDoubleVal = -1;
+
+        for (const player of this.players) {
+            for (const piece of player.getHand()) {
+                if (piece.isDouble() && piece.getPips()[0] > highestDoubleVal) {
+                    highestDoubleVal = piece.getPips()[0];
+                    bestDoublePlayer = player;
+                }
+            }
+        }
+
+        if (bestDoublePlayer) {
+            this.roundFirstPieceMustBeDouble = true;
+            return bestDoublePlayer;
+        }
+
+        // Gdy żaden gracz nie posiada dubla
+        this.roundFirstPieceMustBeDouble = false;
+        let bestPlayer: Player | null = null;
+        let highestWeight = -1;
+        let highestSinglePip = -1;
+
+        for (const player of this.players) {
+            for (const piece of player.getHand()) {
+                const weight = piece.getWeight();
+                const maxPip = Math.max(piece.getPips()[0], piece.getPips()[1]);
+
+                if (weight > highestWeight || (weight === highestWeight && maxPip > highestSinglePip)) {
+                    highestWeight = weight;
+                    highestSinglePip = maxPip;
+                    bestPlayer = player;
+                }
+            }
+        }
+
+        return bestPlayer ?? this.players[0] ?? null;
     }
 
     // Główna funkcja wykonująca ruch gracza (położenie klocka na stole)
-    public playTurn(piece: DominoPiece, side: 'left' | 'right'): void {}
-
-    // Wywoływane, gdy gracz nie ma pasującego klocka i musi dobrać z Boneyard
-    public drawFromBoneyard(player: Player): boolean {
-        const drawedPiece: DominoPiece | undefined = this.boneyard.drawPiece();
-
-        if (!drawedPiece) {
-            return false;
+    public playTurn(piece: DominoPiece, side: PlacementSide): ActionResult {
+        if (this.status !== 'playing') {
+            return { ok: false, reason: 'Gra nie jest w stanie aktywnym' };
         }
 
-        player.addPieceToHand(drawedPiece);
-        return true;
+        if (!this.currentPlayer) {
+            return { ok: false, reason: 'Brak aktywnego gracza' };
+        }
+
+        // 1. Sprawdzamy, czy gracz faktycznie posiada ten klocek w ręce
+        if (!this.currentPlayer.hasPiece(piece)) {
+            return { ok: false, reason: 'Gracz nie posiada tego klocka w ręce' };
+        }
+
+        // 2. Obsługa pierwszego ruchu na pustej planszy
+        if (this.dominoBoard.isEmpty()) {
+            if (this.roundFirstPieceMustBeDouble && !piece.isDouble()) {
+                return { ok: false, reason: 'Pierwszy ruch w tej rundzie musi być dublem' };
+            }
+
+            this.dominoBoard.placeFirstPiece(piece);
+            this.currentPlayer.removePieceFromHand(piece);
+            this.consecutivePasses = 0;
+
+            if (this.checkRoundEnd()) {
+                this.finishRound();
+            } else {
+                this.nextPlayerTurn();
+            }
+
+            return { ok: true };
+        }
+
+        // 3. Sprawdzamy poprawność dołożenia do istniejącego łańcucha
+        const validMoves: PlacementSide[] = this.dominoBoard.getValidPlacements(piece);
+        const isLegalMove: boolean = validMoves.includes(side);
+
+        if (!isLegalMove) {
+            return { ok: false, reason: 'Nielegalny ruch - klocek nie pasuje do wybranego końca' };
+        }
+
+        switch (side) {
+            case "left":
+                this.dominoBoard.playOnLeftEnd(piece);
+                break;
+            case "right":
+                this.dominoBoard.playOnRightEnd(piece);
+                break;
+            case "top":
+                this.dominoBoard.playOnTopEnd(piece);
+                break;
+            case "bottom":
+                this.dominoBoard.playOnBottomEnd(piece);
+                break;
+        }
+
+        // Usuwamy klocek z ręki gracza dopiero po pomyślnym położeniu
+        this.currentPlayer.removePieceFromHand(piece);
+        this.consecutivePasses = 0;
+
+        if (this.checkRoundEnd()) {
+            this.finishRound();
+        } else {
+            this.nextPlayerTurn();
+        }
+
+        return { ok: true };
     }
 
-    // Przesuwa turę na kolejnego gracza w tablicy
-    public nextPlayerTurn(): void {
-        const indexOfCurrentPlayer: number = this.players
-            .findIndex(player => player === this.currentPlayer)
-
-        const indexOfNextPlayer: number = (indexOfCurrentPlayer + 1) % this.players.length;
-
-        this.currentPlayer = this.players[indexOfNextPlayer];
-    }
-
-    // Sprawdza warunki zakończenia rundy (ktoś pozbył się klocków ALBO gra jest zablokowana - nikt nie ma ruchu i boneyard jest pusty)
-    public checkRoundEnd(): boolean {
-
-        // Warunek 1: Ktoś wyłożył wszystkie klocki z ręki
-        const isAnyPlayerWithoutPieces: boolean = this.players
-            .some(player => player.getHand().length === 0);
-
-        if (isAnyPlayerWithoutPieces) {
-            return true; // Koniec rundy!
+    // Wywoływane, gdy gracz nie ma pasującego klocka i dobiera z Boneyarda
+    public drawFromBoneyard(player: Player): ActionResult {
+        if (this.status !== 'playing') {
+            return { ok: false, reason: 'Gra nie jest w stanie aktywnym' };
         }
 
-        // Warunek 2: Zablokowana gra
-        // a) Sprawdzamy, czy w ogóle można jeszcze coś dobrać
-        const isBoneyardEmpty: boolean = this.boneyard.isEmpty();
-
-        // Jeśli talon nie jest pusty, to na pewno ktoś będzie mógł dobrać klocek, więc gra trwa
-        if (!isBoneyardEmpty) {
-            return false;
+        if (this.currentPlayer !== player) {
+            return { ok: false, reason: 'To nie jest tura tego gracza' };
         }
 
-        // b) Talon jest pusty. Musimy sprawdzić, czy ktokolwiek może zrobić ruch.
-        // UWAGA: Wymaga dopisania getterów w klasie DominoBoard!
-        const leftValue = this.dominoBoard.getLeftValue();
-        const rightValue = this.dominoBoard.getRightValue();
-        const topValue = this.dominoBoard.getTopValue();
-        const bottomValue = this.dominoBoard.getBottomValue();
-
-        // Metoda .some() sprawdzi, czy ISTNIEJE CHOCIAŻ JEDEN gracz, który może wykonać ruch
-        const canAnyoneMove: boolean = this.players.some(player =>
-            player.canMakeMove(leftValue, rightValue, topValue, bottomValue)
+        // Gracz nie może dobierać, jeśli posiada legalny ruch
+        const canMove = player.canMakeMove(
+            this.dominoBoard.getLeftValue(),
+            this.dominoBoard.getRightValue(),
+            this.dominoBoard.getTopValue(),
+            this.dominoBoard.getBottomValue(),
+            this.roundFirstPieceMustBeDouble
         );
 
-        return !canAnyoneMove;
+        if (canMove) {
+            return { ok: false, reason: 'Gracz posiada legalny ruch i nie może dobierać klocka' };
+        }
+
+        const drawnPiece: DominoPiece | undefined = this.boneyard.drawPiece();
+        if (!drawnPiece) {
+            return { ok: false, reason: 'Talon (boneyard) jest pusty' };
+        }
+
+        player.addPieceToHand(drawnPiece);
+        return { ok: true };
+    }
+
+    // Pasowanie tury: dozwolone tylko gdy gracz nie ma ruchu i nie ma już klocków w talonie
+    public passTurn(player: Player): ActionResult {
+        if (this.status !== 'playing') {
+            return { ok: false, reason: 'Gra nie jest w stanie aktywnym' };
+        }
+
+        if (this.currentPlayer !== player) {
+            return { ok: false, reason: 'To nie jest tura tego gracza' };
+        }
+
+        const canMove = player.canMakeMove(
+            this.dominoBoard.getLeftValue(),
+            this.dominoBoard.getRightValue(),
+            this.dominoBoard.getTopValue(),
+            this.dominoBoard.getBottomValue(),
+            this.roundFirstPieceMustBeDouble
+        );
+
+        if (canMove) {
+            return { ok: false, reason: 'Gracz posiada legalny ruch i nie może spasować' };
+        }
+
+        if (!this.boneyard.isEmpty()) {
+            return { ok: false, reason: 'Gracz musi dobrać klocek z talonu przed spasowaniem' };
+        }
+
+        this.consecutivePasses++;
+
+        if (this.checkRoundEnd()) {
+            this.finishRound();
+        } else {
+            this.nextPlayerTurn();
+        }
+
+        return { ok: true };
+    }
+
+    // Przesuwa turę na kolejnego gracza
+    public nextPlayerTurn(): void {
+        if (this.players.length === 0) return;
+
+        const currentIndex: number = this.players.findIndex(p => p === this.currentPlayer);
+        const nextIndex: number = (currentIndex + 1) % this.players.length;
+        this.currentPlayer = this.players[nextIndex] ?? null;
+    }
+
+    // Sprawdza warunki zakończenia rundy
+    public checkRoundEnd(): boolean {
+        // 1. Ktoś wyłożył wszystkie klocki z ręki
+        const someoneEmptiedHand = this.players.some(p => p.getHand().length === 0);
+        if (someoneEmptiedHand) {
+            return true;
+        }
+
+        // 2. Gra została zablokowana (wszyscy gracze spasowali pod rząd)
+        if (this.consecutivePasses >= this.players.length) {
+            return true;
+        }
+
+        // 3. Talon jest pusty i żaden gracz nie ma już żadnego możliwego ruchu
+        if (this.boneyard.isEmpty()) {
+            const left = this.dominoBoard.getLeftValue();
+            const right = this.dominoBoard.getRightValue();
+            const top = this.dominoBoard.getTopValue();
+            const bottom = this.dominoBoard.getBottomValue();
+
+            const canAnyoneMove = this.players.some(p =>
+                p.canMakeMove(left, right, top, bottom, this.roundFirstPieceMustBeDouble)
+            );
+
+            if (!canAnyoneMove) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Zakończenie rundy i podliczenie punktów
+    private finishRound(): void {
+        this.calculateRoundScores();
+
+        if (this.checkGameWin()) {
+            this.status = 'gameOver';
+        } else {
+            this.status = 'roundOver';
+        }
     }
 
     // Oblicza punkty z rąk przegranych i dodaje je zwycięzcy rundy
     public calculateRoundScores(): void {
-        let winner: any; //Player | null = null
         let lowestPoints = Infinity;
 
-        // 1. Szukamy gracza z najmniejszą liczbą punktów w ręce
-        this.players.forEach(player => {
+        // Szukamy minimalnej liczby punktów w rękach
+        for (const player of this.players) {
             const points = player.getHandPoints();
             if (points < lowestPoints) {
                 lowestPoints = points;
-                winner = player;
             }
-            // Opcjonalnie: Jeśli dwóch ma tyle samo najmniej (remis przy blokadzie),
-            // można tu dodać logikę braku punktów w rundzie, ale najprościej uznać pierwszego za wygranego.
-        });
+        }
 
-        if (!winner) return; // Zabezpieczenie (nigdy nie powinno wystąpić)
+        // Wszyscy gracze z minimalną liczbą punktów
+        const bestPlayers = this.players.filter(p => p.getHandPoints() === lowestPoints);
 
-        // 2. Liczymy SUMĘ PUNKTÓW Z RĄK WSZYSTKICH GRACZY
-        const totalPoints = this.players.reduce((acc, player) => acc + player.getHandPoints(), 0);
+        // Remis przy blokadzie gry (dwóch lub więcej graczy ma tyle samo minimalnych punktów)
+        if (bestPlayers.length > 1) {
+            // Zgodnie z zasadami: w przypadku remisu żaden gracz nie otrzymuje punktów
+            return;
+        }
 
-        // 3. Wynik zwycięzcy to suma wszystkich klocków MINUS jego własne klocki.
-        // (Jeśli miał 0 klocków, odejmie 0. Jeśli wygrał blokadą mając 5 punktów, odejmie swoje 5).
-        const winningScore = totalPoints - winner.getHandPoints();
+        const roundWinner = bestPlayers[0];
+        if (!roundWinner) return;
 
-        // 4. Dodajemy punkty
-        winner.addScore(winningScore);
+        // Suma punktów ze wszystkich rąk minus punkty zwycięzcy
+        const totalOtherPoints = this.players.reduce((acc, p) => {
+            return p === roundWinner ? acc : acc + p.getHandPoints();
+        }, 0);
 
-        console.log(`Rundę wygrywa gracz zdobywając ${winningScore} punktów!`);
+        roundWinner.addScore(totalOtherPoints);
+
+        // Sprawdzamy wygraną w całej partii
+        const gameWinner = this.players.find(p => p.getPoints() >= this.pointsToWin);
+        if (gameWinner) {
+            this.winner = gameWinner;
+        }
     }
+
     // Sprawdza, czy ktoś osiągnął punktację wygrywającą grę (pointsToWin)
     public checkGameWin(): boolean {
-        return this.players.some(player => player.getPoints() >= this.pointsToWin);
+        const reached = this.players.some(player => player.getPoints() >= this.pointsToWin);
+        if (reached) {
+            let topPlayer: Player | null = null;
+            let maxScore = -1;
+            for (const p of this.players) {
+                if (p.getPoints() > maxScore) {
+                    maxScore = p.getPoints();
+                    topPlayer = p;
+                }
+            }
+            this.winner = topPlayer;
+        }
+        return reached;
     }
 }
+
+export default Game;
