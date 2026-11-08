@@ -10,7 +10,7 @@ export const createAuth = (database: Database) =>
     emailAndPassword: {
       enabled: true,
     },
-    trustedOrigins: [process.env.FRONTEND_URL ?? 'https://localhost:5173'],
+    trustedOrigins: [process.env.FRONTEND_URL ?? 'http://localhost:5173'],
     rateLimit: {
       customRules: { '/sign-in/anonymous': { window: 3600, max: 20 } },
     },

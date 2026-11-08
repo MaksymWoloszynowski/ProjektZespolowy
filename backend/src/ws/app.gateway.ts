@@ -1,6 +1,7 @@
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
@@ -15,11 +16,13 @@ import type { Ack, TableSettings } from './protocol.js';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL ?? 'https://localhost:5173',
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
     credentials: true,
   },
 })
-export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class AppGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -51,6 +54,10 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     };
   }
 
+  handleConnection(client: Socket): void {
+    this.tables.reconnect(client.data.userId);
+  }
+
   async handleDisconnect(client: Socket): Promise<void> {
     const userId: string = client.data.userId;
 
@@ -59,7 +66,7 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     const sockets = await this.server.in(userRoom(userId)).fetchSockets();
 
     if (sockets.length === 0) {
-      this.tables.leave(userId);
+      this.tables.disconnect(userId);
     }
   }
 
