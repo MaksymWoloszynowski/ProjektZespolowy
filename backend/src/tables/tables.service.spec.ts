@@ -1,6 +1,8 @@
+import { Logger } from '@nestjs/common';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameEngine } from '../engines/engine.js';
-import { TablesService, tableRoom, userRoom } from './tables.service.js';
+import { TablesService } from './tables.service.js';
+import { tableRoom, userRoom } from './table.js';
 
 // race to 3: each action adds 1 to the player's score, first to 3 wins
 type State = Record<string, number>;
@@ -128,17 +130,75 @@ describe('TablesService', () => {
     expect(tables.start('a').ok).toBe(true);
   });
 
-  it('dissolves the table when a player leaves mid-game', () => {
+  it('lets the other player win when a duel is left mid-game', () => {
     tables.create('a', 'race', settings);
-    tables.join('b', tableId());
+    const id = tableId();
+    tables.join('b', id);
     tables.start('a');
+    hub.emit.mockClear();
+
     tables.leave('b');
-    expect(hub.emit).toHaveBeenCalledWith(
+
+    expect(hub.emit).toHaveBeenCalledWith(tableRoom(id), 'game:over', {
+      result: { a: 'win', b: 'loss' },
+    });
+    expect(hub.emit).toHaveBeenLastCalledWith(
+      tableRoom(id),
+      'table:state',
+      expect.objectContaining({ status: 'lobby', players: ['a'] }),
+    );
+    expect(tables.action('a', 'inc')).toEqual({
+      ok: false,
+      reason: 'no game in progress',
+    });
+  });
+
+  it('aborts a game of three when one leaves and the host starts a new one', () => {
+    tables.create('a', 'race', { ...settings, maxPlayers: 3 });
+    const id = tableId();
+    tables.join('b', id);
+    tables.join('c', id);
+    tables.start('a');
+    tables.action('a', 'inc');
+    hub.emit.mockClear();
+
+    tables.leave('c');
+
+    expect(hub.emit).toHaveBeenCalledWith(tableRoom(id), 'game:aborted', {
+      leaver: 'c',
+    });
+    expect(hub.emit).not.toHaveBeenCalledWith(
       expect.any(String),
-      'table:closed',
+      'game:over',
       expect.anything(),
     );
-    expect(tables.action('a', 'inc').ok).toBe(false);
+    expect(hub.emit).toHaveBeenLastCalledWith(
+      tableRoom(id),
+      'table:state',
+      expect.objectContaining({ status: 'lobby', players: ['a', 'b'] }),
+    );
+
+    // a replacement sits down and the host deals again, from scratch
+    expect(tables.join('d', id).ok).toBe(true);
+    hub.emit.mockClear();
+    expect(tables.start('a').ok).toBe(true);
+    expect(hub.emit).toHaveBeenCalledWith(userRoom('a'), 'game:state', {
+      view: { a: 0 },
+    });
+  });
+
+  it('passes the host on when the host leaves a running game', () => {
+    tables.create('a', 'race', { ...settings, maxPlayers: 3 });
+    const id = tableId();
+    tables.join('b', id);
+    tables.join('c', id);
+    tables.start('a');
+    tables.leave('a');
+    expect(hub.emit).toHaveBeenLastCalledWith(
+      tableRoom(id),
+      'table:state',
+      expect.objectContaining({ hostId: 'b', players: ['b', 'c'] }),
+    );
   });
 
   it('fires the timeout once when a pool runs out', () => {
@@ -173,6 +233,81 @@ describe('TablesService', () => {
     expect(tables.action('a', null)).toEqual({
       ok: false,
       reason: 'invalid action',
+    });
+  });
+
+  describe('an engine that throws', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+      tables.create('a', 'race', { ...settings, timeSeconds: 60 });
+      tables.join('b', tableId());
+      tables.start('a');
+      hub.emit.mockClear();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    const expectAborted = () => {
+      expect(hub.emit).toHaveBeenCalledWith(
+        expect.any(String),
+        'game:aborted',
+        {
+          leaver: undefined,
+        },
+      );
+      expect(hub.emit).toHaveBeenLastCalledWith(
+        expect.any(String),
+        'table:state',
+        expect.objectContaining({ status: 'lobby' }),
+      );
+    };
+
+    it('aborts the game instead of crashing the timer', () => {
+      vi.spyOn(raceEngine, 'onTurnTimeout').mockImplementationOnce(() => {
+        throw new Error('engine bug');
+      });
+      vi.advanceTimersByTime(60_000);
+      expectAborted();
+    });
+
+    it('aborts the game when the views cannot be built after a move', () => {
+      vi.spyOn(raceEngine, 'getPlayerView').mockImplementationOnce(() => {
+        throw new Error('engine bug');
+      });
+      expect(tables.action('a', 'inc').ok).toBe(true);
+      expectAborted();
+    });
+  });
+
+  describe('event rate limit', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('lets a player send 5 events per second and refuses the 6th', () => {
+      tables.create('a', 'race', settings);
+      for (let i = 0; i < 5; i++) expect(tables.chat('a', 'hi').ok).toBe(true);
+      expect(tables.chat('a', 'hi')).toEqual({ ok: false, reason: 'too fast' });
+
+      vi.advanceTimersByTime(1000);
+      expect(tables.chat('a', 'hi').ok).toBe(true);
+    });
+
+    it('counts moves and chat together and does not touch other players', () => {
+      tables.create('a', 'race', settings);
+      tables.join('b', tableId());
+      tables.start('a');
+      for (let i = 0; i < 5; i++) tables.action('a', 'inc');
+      expect(tables.chat('a', 'hi')).toEqual({ ok: false, reason: 'too fast' });
+      expect(tables.chat('b', 'hi').ok).toBe(true);
     });
   });
 
@@ -295,16 +430,14 @@ describe('TablesService', () => {
       expect(tables.action('b', 'inc').ok).toBe(true);
     });
 
-    it('drops the player and closes a running game after the grace period', () => {
+    it('makes the player forfeit a running duel after the grace period', () => {
       startGame();
       tables.disconnect('b');
       vi.advanceTimersByTime(1000);
 
-      expect(hub.emit).toHaveBeenCalledWith(
-        expect.any(String),
-        'table:closed',
-        expect.anything(),
-      );
+      expect(hub.emit).toHaveBeenCalledWith(expect.any(String), 'game:over', {
+        result: { a: 'win', b: 'loss' },
+      });
       expect(tables.action('a', 'inc').ok).toBe(false);
     });
 

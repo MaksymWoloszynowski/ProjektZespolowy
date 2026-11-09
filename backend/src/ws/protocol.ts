@@ -43,5 +43,5 @@ export interface ServerToClient {
       | { from: PlayerId; text: string }
       | { from: PlayerId; event: 'joined' | 'left' },
   ) => void;
-  'table:closed': (data: { reason: string }) => void;
+  'game:aborted': (data: { leaver?: PlayerId }) => void;
 }
