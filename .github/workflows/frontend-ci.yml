@@ -23,8 +23,7 @@ jobs:
                 filters: |
                     frontend:
                     - "frontend/**"
-                    - ".github/workflows/frontend-ci.yml"
-                
+
     frontend-build:
         needs: frontend-changes
         if: needs.frontend-changes.outputs.frontend == 'true'
