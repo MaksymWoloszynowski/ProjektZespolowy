@@ -6,7 +6,14 @@
       "idx": 0,
       "version": "7",
       "when": 1792953026065,
-      "tag": "0000_clever_hitman",
+      "tag": "0000_init_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793625607536,
+      "tag": "0001_add_game_and_anonymous_user",
       "breakpoints": true
     }
   ]

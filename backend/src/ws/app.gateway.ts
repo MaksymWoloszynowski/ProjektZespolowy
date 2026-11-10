@@ -1,6 +1,7 @@
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
@@ -10,27 +11,34 @@ import {
 import { AuthService } from '@thallesp/nestjs-better-auth';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Server, Socket } from 'socket.io';
-import { TablesService, userRoom } from '../tables/tables.service.js';
+import { TablesService } from '../tables/tables.service.js';
+import { userRoom } from '../tables/table.js';
 import type { Ack, TableSettings } from './protocol.js';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL ?? 'https://localhost:5173',
+    origin: (origin, cb) =>
+      cb(
+        null,
+        origin === (process.env.FRONTEND_URL ?? 'http://localhost:5173'),
+      ),
     credentials: true,
   },
 })
-export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class AppGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
   constructor(
-    private readonly auth: AuthService,
-    private readonly tables: TablesService,
+    private readonly authService: AuthService,
+    private readonly tablesService: TablesService,
   ) {}
 
   afterInit(server: Server): void {
     server.use(async (socket, next) => {
-      const session = await this.auth.api
+      const session = await this.authService.api
         .getSession({ headers: fromNodeHeaders(socket.handshake.headers) })
         .catch(() => null);
 
@@ -44,11 +52,15 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
       next();
     });
 
-    this.tables.hub = {
+    this.tablesService.hub = {
       join: (userId, room) => server.in(userRoom(userId)).socketsJoin(room),
       leave: (userId, room) => server.in(userRoom(userId)).socketsLeave(room),
       emit: (room, event, ...args) => server.to(room).emit(event, ...args),
     };
+  }
+
+  handleConnection(client: Socket): void {
+    this.tablesService.reconnect(client.data.userId);
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
@@ -59,7 +71,7 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     const sockets = await this.server.in(userRoom(userId)).fetchSockets();
 
     if (sockets.length === 0) {
-      this.tables.leave(userId);
+      this.tablesService.disconnect(userId);
     }
   }
 
@@ -68,7 +80,11 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { gameId: string; settings: TableSettings },
   ): Ack {
-    return this.tables.create(client.data.userId, data?.gameId, data?.settings);
+    return this.tablesService.create(
+      client.data.userId,
+      data?.gameId,
+      data?.settings,
+    );
   }
 
   @SubscribeMessage('table:join')
@@ -76,17 +92,17 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { tableId: string },
   ): Ack {
-    return this.tables.join(client.data.userId, data?.tableId);
+    return this.tablesService.join(client.data.userId, data?.tableId);
   }
 
   @SubscribeMessage('table:leave')
   leave(@ConnectedSocket() client: Socket): Ack {
-    return this.tables.leave(client.data.userId);
+    return this.tablesService.leave(client.data.userId);
   }
 
   @SubscribeMessage('table:start')
   start(@ConnectedSocket() client: Socket): Ack {
-    return this.tables.start(client.data.userId);
+    return this.tablesService.start(client.data.userId);
   }
 
   @SubscribeMessage('game:action')
@@ -94,7 +110,7 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { action: unknown },
   ): Ack {
-    return this.tables.action(client.data.userId, data?.action);
+    return this.tablesService.action(client.data.userId, data?.action);
   }
 
   @SubscribeMessage('chat:send')
@@ -102,6 +118,6 @@ export class AppGateway implements OnGatewayInit, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { text: string },
   ): Ack {
-    return this.tables.chat(client.data.userId, data?.text);
+    return this.tablesService.chat(client.data.userId, data?.text);
   }
 }
